@@ -1,0 +1,306 @@
+ /* Responsive */
+    @media (max-width:880px){
+      .layout{grid-template-columns:1fr; padding-bottom:40px}
+      .carrito{position:relative;top:auto}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand" role="banner">
+      <div class="logo" aria-hidden="true">UT</div>
+      <div>
+        <h1>Tienda UTADEO — Merch</h1>
+        <p class="lead">Artículos oficiales de la Universidad Jorge Tadeo Lozano (demo)</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout" id="main">
+    <section>
+      <div id="categoria-wrap" role="region" aria-label="Filtros">
+        <label for="categoria">Filtrar por categoría</label>
+        <select id="categoria" aria-label="Filtrar productos">
+          <option value="todos">Todos</option>
+          <option value="indumentaria">Indumentaria</option>
+          <option value="accesorios">Accesorios</option>
+          <option value="coleccionables">Coleccionables</option>
+        </select>
+      </div>
+
+      <div id="productos" aria-live="polite" aria-busy="false" style="margin-top:14px"></div>
+      <div id="mensaje-vacio" class="hint" style="display:none"></div>
+    </section>
+
+    <aside class="carrito" aria-label="Carrito de compras">
+      <h2>🛒 Carrito</h2>
+      <p><strong>Items: <span id="cantidad-carrito">0</span></strong></p>
+      <ul id="lista-carrito"></ul>
+
+      <div class="totales">
+        <p>Subtotal: <span id="subtotal-text">COP $0</span></p>
+        <p>Descuento: <span id="descuento-text">COP $0</span></p>
+        <p>Impuestos: <span id="impuestos-text">COP $0</span></p>
+        <p class="total-strong">Total: <span id="total-text">COP $0</span></p>
+      </div>
+
+      <div class="acciones">
+        <button id="btn-vaciar" class="btn-clear" type="button">Vaciar</button>
+        <button id="btn-finalizar" class="btn-final" type="button">Finalizar (simulado)</button>
+      </div>
+
+      <div style="margin-top:12px">
+        <h3 style="margin:0 0 8px">Método de pago</h3>
+        <div id="paypal-button-container" style="display:none"></div>
+        <p class="hint">PayPal sandbox — para pruebas. (client-id: sb)</p>
+      </div>
+    </aside>
+  </main>
+
+  <!-- PayPal SDK (sandbox). Reemplaza client-id=sb por tu client-id de pruebas -->
+  <script src="https://www.paypal.com/sdk/js?client-id=sb&currency=USD&components=buttons"></script>
+
+  <script>
+    /* ===== CONFIG ===== */
+    const MONEDA_DISPLAY = 'COP';       // Moneda para formateo visual
+    const LOCALE = 'es-CO';
+    const TAX_RATE = 0.00;              // ajustar si aplica IVA (ej: 0.19)
+    const DESCUENTO = 0.00;            // descuento fijo por ahora
+    // Para PayPal se usa USD en el SDK src anterior; el botón usa el valor numérico
+    const PAYPAL_CURRENCY = 'USD';
+
+    /* ===== DATA (tus 3 imágenes como productos) ===== */
+    const productos = [
+      {
+        id: 101,
+        nombre: 'Hoodie UTADEO - Ed. Limitada',
+        precio: 45000,
+        categoria: 'ropa',
+        img: 'https://i.postimg.cc/NFq68dYh/Gemini-Generated-Image-jdlp9tjdlp9tjdlp.png'
+      },
+      {
+        id: 102,
+        nombre: 'Hoodie UTADEO - Azul Institucional',
+        precio: 32000,
+        categoria: 'ropa',
+        img: 'https://i.postimg.cc/fRBv477c/Gemini-Generated-Image-q66bx1q66bx1q66b.png'
+      },
+      {
+        id: 103,
+        nombre: 'Hoodie Coleccionable UTADEO',
+        precio: 120000,
+        categoria: 'ropa',
+        img: 'https://i.postimg.cc/jSshk37F/Gemini-Generated-Image-73qlb573qlb573ql.png'
+      }
+    ];
+
+    /* ===== SELECTORES / ESTADO ===== */
+    const el = {
+      contProds: document.getElementById('productos'),
+      select: document.getElementById('categoria'),
+      lista: document.getElementById('lista-carrito'),
+      subtotal: document.getElementById('subtotal-text'),
+      impuestos: document.getElementById('impuestos-text'),
+      descuento: document.getElementById('descuento-text'),
+      total: document.getElementById('total-text'),
+      cantidad: document.getElementById('cantidad-carrito'),
+      btnVaciar: document.getElementById('btn-vaciar'),
+      btnFinal: document.getElementById('btn-finalizar'),
+      paypal: document.getElementById('paypal-button-container'),
+      mensajeVacio: document.getElementById('mensaje-vacio'),
+    };
+
+    let carrito = new Map();
+    const money = new Intl.NumberFormat(LOCALE, { style: 'currency', currency: MONEDA_DISPLAY });
+
+    /* ===== RENDER PRODUCTOS ===== */
+    function renderProductos(lista){
+      el.contProds.setAttribute('aria-busy','true');
+      el.contProds.innerHTML = '';
+      if(!Array.isArray(lista) || lista.length === 0){
+        el.mensajeVacio.style.display = 'block';
+        el.mensajeVacio.innerHTML = 'No hay productos en esta categoría.';
+        el.contProds.setAttribute('aria-busy','false');
+        return;
+      } else {
+        el.mensajeVacio.style.display = 'none';
+      }
+
+      lista.forEach(p=>{
+        const card = document.createElement('article');
+        card.className = 'producto';
+        card.innerHTML = `
+          <img loading="lazy" src="${p.img}" alt="${p.nombre}">
+          <h3>${p.nombre}</h3>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+            <div class="price">${money.format(Number(p.precio)||0)}</div>
+            <button class="btn-add" data-add="${p.id}">Agregar</button>
+          </div>
+        `;
+        const img = card.querySelector('img');
+        img.addEventListener('error', ()=>{
+          img.src = 'https://via.placeholder.com/400x300?text=Imagen+no+disponible';
+          img.alt = p.nombre + ' (sin imagen)';
+        });
+        el.contProds.appendChild(card);
+      });
+      el.contProds.setAttribute('aria-busy','false');
+    }
+
+    /* ===== FILTRO ===== */
+    function filtrar(){
+      const sel = el.select.value;
+      const data = sel === 'todos' ? productos : productos.filter(x => x.categoria === sel);
+      renderProductos(data);
+      localStorage.setItem('filtro_categoria', sel);
+    }
+    function cargarFiltro(){
+      const f = localStorage.getItem('filtro_categoria');
+      if(f) el.select.value = f;
+    }
+
+    /* ===== CARRITO y TOTALES ===== */
+    function persist(){
+      localStorage.setItem('carrito', JSON.stringify(Array.from(carrito.entries())));
+    }
+    function loadCarrito(){
+      const raw = localStorage.getItem('carrito');
+      if(raw) carrito = new Map(JSON.parse(raw));
+    }
+
+    function totales(){
+      const subtotal = [...carrito.values()].reduce((acc,it)=> acc + Number(it.precio||0)*Number(it.cantidad||0), 0);
+      const descuento = Math.min(DESCUENTO, subtotal);
+      const base = subtotal - descuento;
+      const impuestos = +(base * TAX_RATE).toFixed(2);
+      const total = +(base + impuestos).toFixed(2);
+      const cantidad = [...carrito.values()].reduce((a,i)=> a + Number(i.cantidad||0), 0);
+      return { subtotal, descuento, impuestos, total, cantidad };
+    }
+
+    function pintarCarrito(){
+      el.lista.innerHTML = '';
+      if(carrito.size === 0){
+        el.lista.innerHTML = '<li style="opacity:0.7;padding:8px;border-radius:6px;background:transparent">Carrito vacío</li>';
+      } else {
+        carrito.forEach(it=>{
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <div>
+              <strong>${it.nombre}</strong><br>
+              <small>${money.format(it.precio)} c/u</small>
+            </div>
+            <div class="qty">
+              <button aria-label="Disminuir" data-dec="${it.id}">−</button>
+              <span>${it.cantidad}</span>
+              <button aria-label="Aumentar" data-inc="${it.id}">+</button>
+              <button class="remove" aria-label="Eliminar" data-del="${it.id}">Eliminar</button>
+            </div>
+          `;
+          el.lista.appendChild(li);
+        });
+      }
+
+      const {subtotal,descuento,impuestos,total,cantidad} = totales();
+      el.subtotal.textContent = money.format(subtotal);
+      el.descuento.textContent = money.format(descuento);
+      el.impuestos.textContent = money.format(impuestos);
+      el.total.textContent = money.format(total);
+      el.cantidad.textContent = cantidad;
+
+      // Mostrar PayPal sólo si total > 0
+      el.paypal.style.display = total > 0 ? 'block' : 'none';
+      renderPayPal(total);
+    }
+
+    function addToCart(id){
+      const p = productos.find(x=> x.id === id);
+      if(!p) return alert('Producto no encontrado.');
+      const it = carrito.get(id);
+      if(it) it.cantidad++;
+      else carrito.set(id, {...p, cantidad: 1});
+      persist(); pintarCarrito();
+    }
+    function dec(id){
+      const it = carrito.get(id);
+      if(!it) return;
+      it.cantidad--;
+      if(it.cantidad <= 0) carrito.delete(id);
+      persist(); pintarCarrito();
+    }
+    function del(id){
+      carrito.delete(id);
+      persist(); pintarCarrito();
+    }
+
+    /* ===== PAYPAL (botón dinámico) ===== */
+    let paypalRenderedTotal = null;
+    function renderPayPal(total){
+      // si no está disponible la librería o no hay total -> limpiar
+      if(!window.paypal) return;
+      if(total <= 0){ paypalRenderedTotal = null; el.paypal.innerHTML = ''; return; }
+      // evitar rerender si mismo total ya renderizado
+      if(paypalRenderedTotal === total && el.paypal.childElementCount > 0) return;
+
+      paypalRenderedTotal = total;
+      el.paypal.innerHTML = '';
+      // Nota: PayPal SDK en este ejemplo fue cargado con currency=USD; para pruebas reales ajusta en SDK y los valores.
+      paypal.Buttons({
+        style:{layout:'vertical'},
+        createOrder:(data,actions)=>{
+          // convertimos subtotal aproximado a USD para el botón (demo simple): aquí se usa una tasa fija de ejemplo 1 USD = 4400 COP
+          // En un proyecto real, usa una conversión real y/o muestra el pago en la misma moneda soportada por PayPal.
+          const conversionRate = 4400; // ejemplo
+          const totalUSD = Math.max(0.01, (total / conversionRate)).toFixed(2);
+          return actions.order.create({
+            purchase_units: [{ amount: { value: totalUSD, currency_code: PAYPAL_CURRENCY } }]
+          });
+        },
+        onApprove:(data,actions)=>actions.order.capture().then(details=>{
+          alert('Pago aprobado. ¡Gracias! (simulado)');
+          carrito.clear(); persist(); pintarCarrito();
+        }),
+        onError: err => {
+          console.error(err);
+          alert('Error en el pago (sandbox). Reintenta.');
+        }
+      }).render('#paypal-button-container');
+    }
+
+    /* ===== EVENTOS (delegación) ===== */
+    document.addEventListener('click', e=>{
+      const addBtn = e.target.closest('[data-add]');
+      if(addBtn) return addToCart( +addBtn.dataset.add );
+
+      const inc = e.target.closest('[data-inc]');
+      if(inc) return addToCart( +inc.dataset.inc );
+
+      const decBtn = e.target.closest('[data-dec]');
+      if(decBtn) return dec( +decBtn.dataset.dec );
+
+      const delBtn = e.target.closest('[data-del]');
+      if(delBtn) return del( +delBtn.dataset.del );
+    });
+
+    el.select.addEventListener('change', filtrar);
+    el.btnVaciar.addEventListener('click', ()=>{
+      if(confirm('¿Vaciar el carrito?')){ carrito.clear(); persist(); pintarCarrito(); }
+    });
+    el.btnFinal.addEventListener('click', ()=>{
+      if(carrito.size === 0) return alert('El carrito está vacío.');
+      alert('Pedido confirmado (simulado) — consola para detalles.');
+      console.log('Pedido (simulado):', Array.from(carrito.values()));
+      carrito.clear(); persist(); pintarCarrito();
+    });
+
+    /* ===== INIT ===== */
+    (function init(){
+      cargarFiltro();
+      renderProductos(productos);
+      loadCarrito();
+      pintarCarrito();
+      document.getElementById('main')?.focus({preventScroll:true});
+    })();
+  </script>
+</body>
+</html>
